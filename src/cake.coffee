@@ -44,14 +44,19 @@ helpers.extend global,
 # asynchrony may cause tasks to execute in a different order than you'd expect.
 # If no tasks are passed, print the help screen.
 exports.run = ->
-  path.exists 'Cakefile', (exists) ->
-    throw new Error("Cakefile not found in #{process.cwd()}") unless exists
-    args = process.argv.slice 2
-    CoffeeScript.run fs.readFileSync('Cakefile').toString(), filename: 'Cakefile'
-    oparse = new optparse.OptionParser switches
-    return printTasks() unless args.length
-    options = oparse.parse(args)
-    invoke arg for arg in options.arguments
+  parentPath = detectPathUp('Cakefile')
+  if !parentPath
+    console.error "Cakefile not found in current or parent directories."
+    process.exit 1
+  # ensure Cakefile is run from where it was found
+  process.chdir parentPath
+
+  args = process.argv.slice 2
+  CoffeeScript.run fs.readFileSync('Cakefile').toString(), filename: 'Cakefile'
+  oparse = new optparse.OptionParser switches
+  return printTasks() unless args.length
+  options = oparse.parse(args)
+  invoke arg for arg in options.arguments
 
 # Display the list of Cake tasks in a format similar to `rake -T`
 printTasks = ->
@@ -67,3 +72,14 @@ printTasks = ->
 missingTask = (task) ->
   console.log "No such task: \"#{task}\""
   process.exit 1
+
+# Detect a file in current or parent directories, returning the found path.
+detectPathUp = (targetPath, startPath='.') ->
+  dots = ''
+  while true
+    curdir = path.resolve(path.join(startPath, dots))
+    if path.existsSync(path.join(curdir, targetPath))
+      return curdir
+    if curdir == '/'
+      return null
+    dots += '../'
